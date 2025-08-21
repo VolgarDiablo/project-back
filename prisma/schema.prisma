@@ -1,0 +1,150 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               BigInt  @id @default(autoincrement())
+  name             String
+  email            String  @unique
+  phone            String?
+  password         String
+  affiliate_id     String  @unique @default(cuid()) // реферальный код пользователя
+  referred_by      String? // кто привел пользователя
+  email_verified   Boolean @default(false)
+  balance          Float   @default(0) @db.DoublePrecision
+  profit_balance   Float   @default(0) @db.DoublePrecision
+  invest_balance   Float   @default(0) @db.DoublePrecision
+  country_code     String?
+  level1_per       Int     @default(5) // процент с первого уровня
+  level2_per       Int     @default(2) // процент со второго уровня
+  u_level1_balance Float   @default(0) @db.DoublePrecision // заработок с 1 уровня
+  u_level2_balance Float   @default(0) @db.DoublePrecision // заработок со 2 уровня
+
+  role Role @default(USER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Реферальная система - связи
+  referralRecord  UserReferral?  @relation("UserReferralUser")
+  referrals       UserReferral[] @relation("Level1Referral")
+  level2Referrals UserReferral[] @relation("Level2Referral")
+
+  orders    Order[]
+  withdraws Withdraw[]
+  earns     Earn[]
+
+  @@map("users")
+}
+
+model UserReferral {
+  id        BigInt  @id @default(autoincrement())
+  user_id   BigInt  @unique
+  level1_id BigInt?
+  level2_id BigInt?
+
+  // Связи
+  user   User  @relation("UserReferralUser", fields: [user_id], references: [id], onDelete: Cascade)
+  level1 User? @relation("Level1Referral", fields: [level1_id], references: [id])
+  level2 User? @relation("Level2Referral", fields: [level2_id], references: [id])
+
+  @@map("user_referral")
+}
+
+model Withdraw {
+  id             BigInt   @id @default(autoincrement())
+  user_id        BigInt
+  invoice_id     String?
+  type           String
+  amount_percent Float    @db.DoublePrecision
+  amount         Float    @db.DoublePrecision
+  status         String
+  details_first  String
+  details_second String
+  details_third  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("withdraws")
+}
+
+model Order {
+  id             BigInt  @id @default(autoincrement())
+  user_id        BigInt
+  invoice_id     String?
+  status         String
+  payment_method String
+  type           String
+  amount         Float   @db.DoublePrecision
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  User       User       @relation(fields: [user_id], references: [id])
+  OrderPlans OrderPlan?
+  Earns      Earn[]
+
+  @@map("orders")
+}
+
+model Plan {
+  id            BigInt @id @default(autoincrement())
+  title         String
+  description   String
+  percent_daily Float  @db.DoublePrecision
+  term_days     Int
+  min_deposit   Int
+  roi           Float  @db.DoublePrecision
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  OrderPlans OrderPlan[]
+
+  @@map("plans")
+}
+
+model OrderPlan {
+  id       BigInt @id @default(autoincrement())
+  order_id BigInt @unique
+  plan_id  BigInt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Order Order @relation(fields: [order_id], references: [id])
+  Plan  Plan  @relation(fields: [plan_id], references: [id])
+
+  @@map("order_plans")
+}
+
+model Earn {
+  id       BigInt @id @default(autoincrement())
+  user_id  BigInt
+  order_id BigInt
+  amount   Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Связи
+  user   User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  Orders Order @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  @@map("earns")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
