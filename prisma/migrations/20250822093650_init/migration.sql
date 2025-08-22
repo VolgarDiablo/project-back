@@ -64,6 +64,7 @@ CREATE TABLE "public"."orders" (
     "payment_method" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "amount" DOUBLE PRECISION NOT NULL,
+    "active_plan_data" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

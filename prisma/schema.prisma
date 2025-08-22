@@ -80,13 +80,14 @@ model Withdraw {
 }
 
 model Order {
-  id             Int     @id @default(autoincrement())
-  user_id        Int
-  invoice_id     String?
-  status         String
-  payment_method String
-  type           String
-  amount         Float   @db.DoublePrecision
+  id               Int       @id @default(autoincrement())
+  user_id          Int
+  invoice_id       String?
+  status           String
+  payment_method   String
+  type             String
+  amount           Float     @db.DoublePrecision
+  active_plan_data DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

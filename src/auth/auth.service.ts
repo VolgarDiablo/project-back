@@ -78,27 +78,27 @@ export class AuthService {
     return null;
   }
 
-  verifyToken(token: string): IJwtPayload {
+  // src/auth/auth.service.ts
+  verifyToken(token: string): any {
     const secret = this.configService.get<string>('JWT_SECRET');
     if (!secret) {
       throw new Error('JWT_SECRET is required');
     }
 
     try {
+      console.log('🔑 JWT_SECRET:', secret); // Проверим секрет
+      console.log('🎫 Token to verify:', token); // Проверим токен
+
       const decoded = jwt.verify(token, secret);
+      console.log('✅ Token verified successfully:', decoded);
 
       if (typeof decoded !== 'object' || decoded === null) {
         throw new UnauthorizedException('Invalid token payload');
       }
 
-      const payload = decoded as unknown as IJwtPayload;
-
-      if (!payload.sub || !payload.email || !payload.role) {
-        throw new UnauthorizedException('Token payload is incomplete');
-      }
-
-      return payload;
+      return decoded;
     } catch (error) {
+      console.log('❌ JWT verification failed:', error.message);
       throw new UnauthorizedException('Invalid token');
     }
   }

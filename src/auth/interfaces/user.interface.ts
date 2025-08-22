@@ -7,7 +7,8 @@ export interface ICreateUser {
 }
 
 export interface IJwtPayload {
-  sub: number;
+  id: number;
+  sub?: number;
   email: string;
   role: string;
   iat?: number;
