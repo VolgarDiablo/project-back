@@ -1,75 +1,73 @@
+// src/auth/auth.service.ts
 import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
-import { AuthResponseDto } from './dto/auth-response.dto';
+import { ITokenResponse, IJwtPayload } from './interfaces/user.interface';
 import { User } from '@prisma/client';
+import * as jwt from 'jsonwebtoken';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
-    private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
-  async signup(registerDto: SignupDto): Promise<AuthResponseDto> {
-    // Проверяем совпадение паролей
-    if (registerDto.password !== registerDto.confirmPassword) {
-      throw new BadRequestException('Пароли не совпадают');
+  async signup(signupDto: SignupDto): Promise<void> {
+    if (signupDto.password !== signupDto.confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
     }
 
-    // Создаем пользователя
     const user = await this.usersService.create({
-      name: registerDto.name,
-      email: registerDto.email,
-      phone: registerDto.phone,
-      password: registerDto.password,
-      referralCode: registerDto.referralCode,
+      name: signupDto.name,
+      email: signupDto.email,
+      phone: signupDto.phone,
+      password: signupDto.password,
+      referralCode: signupDto.referralCode,
     });
 
-    // TODO: Отправить email подтверждение через Postmark
+    // Отправляем email для подтверждения (пока только логируем)
+    await this.usersService.sendVerificationEmail(user);
 
-    // Генерируем JWT токен
-    const token = this.generateToken(user);
-
-    return {
-      access_token: token,
-      user: {
-        id: user.id.toString(),
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        email_verified: user.email_verified,
-      },
-    };
+    throw new UnauthorizedException(
+      'Registration successful. Please check your email to verify your account.',
+    );
   }
 
-  async login(loginDto: LoginDto): Promise<AuthResponseDto> {
-    const user = await this.validateUser(loginDto.email, loginDto.password);
+  async login(loginDto: LoginDto): Promise<ITokenResponse> {
+    const user = await this.usersService.findByEmail(loginDto.email);
 
     if (!user) {
-      throw new UnauthorizedException('Неверный email или пароль');
+      throw new UnauthorizedException('Invalid email or password');
     }
 
-    const token = this.generateToken(user);
+    const isMatched = await this.usersService.validatePassword(
+      user,
+      loginDto.password,
+    );
 
-    return {
-      access_token: token,
-      user: {
-        id: user.id.toString(),
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        email_verified: user.email_verified,
-      },
-    };
+    if (!isMatched) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (!user.email_verified) {
+      await this.usersService.sendVerificationEmail(user);
+      throw new UnauthorizedException(
+        'Email not verified. Verification link sent.',
+      );
+    }
+
+    const token = this.generateTokenActive({ id: user.id });
+    await this.usersService.saveActiveToken(user.id, token);
+
+    return { token };
   }
-
   async validateUser(email: string, password: string): Promise<User | null> {
     const user = await this.usersService.findByEmail(email);
 
@@ -80,13 +78,42 @@ export class AuthService {
     return null;
   }
 
-  private generateToken(user: User): string {
-    const payload = {
-      sub: user.id.toString(),
-      email: user.email,
-      role: user.role,
-    };
+  verifyToken(token: string): IJwtPayload {
+    const secret = this.configService.get<string>('JWT_SECRET');
+    if (!secret) {
+      throw new Error('JWT_SECRET is required');
+    }
 
-    return this.jwtService.sign(payload);
+    try {
+      const decoded = jwt.verify(token, secret);
+
+      if (typeof decoded !== 'object' || decoded === null) {
+        throw new UnauthorizedException('Invalid token payload');
+      }
+
+      const payload = decoded as unknown as IJwtPayload;
+
+      if (!payload.sub || !payload.email || !payload.role) {
+        throw new UnauthorizedException('Token payload is incomplete');
+      }
+
+      return payload;
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+  }
+
+  async verifyEmail(token: string): Promise<boolean> {
+    return this.usersService.verifyEmailToken(token);
+  }
+
+  private generateTokenActive(payload: { id: number }): string {
+    const secret = this.configService.get<string>('JWT_SECRET');
+
+    if (!secret) {
+      throw new Error('JWT_SECRET is required');
+    }
+
+    return jwt.sign(payload, secret, { expiresIn: '30d' });
   }
 }

@@ -1,7 +1,8 @@
+// src/users/users.service.ts
 import {
   Injectable,
   ConflictException,
-  NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { User, Role } from '@prisma/client';
@@ -18,21 +19,20 @@ export class UsersService {
     password: string;
     referralCode?: string;
   }): Promise<User> {
-    // Проверяем существует ли пользователь
     const existingUser = await this.prisma.user.findUnique({
       where: { email: userData.email },
     });
 
     if (existingUser) {
-      throw new ConflictException('Пользователь с таким email уже существует');
+      throw new ConflictException(
+        'A user with this email address already exists.',
+      );
     }
 
-    // Хешируем пароль
     const hashedPassword = await bcrypt.hash(userData.password, 10);
 
-    // Обрабатываем реферальную систему
-    let referrerUserId: bigint | null = null;
-    let level2UserId: bigint | null = null;
+    let referrerUserId: number | null = null;
+    let level2UserId: number | null = null;
 
     if (userData.referralCode) {
       const referrer = await this.prisma.user.findUnique({
@@ -43,14 +43,12 @@ export class UsersService {
       if (referrer) {
         referrerUserId = referrer.id;
 
-        // Если у реферера есть свой реферер - это level2
         if (referrer.referralRecord?.level1_id) {
           level2UserId = referrer.referralRecord.level1_id;
         }
       }
     }
 
-    // Создаем пользователя
     const user = await this.prisma.user.create({
       data: {
         name: userData.name,
@@ -61,7 +59,6 @@ export class UsersService {
       },
     });
 
-    // Создаем запись в реферальной системе
     await this.prisma.userReferral.create({
       data: {
         user_id: user.id,
@@ -79,20 +76,94 @@ export class UsersService {
     });
   }
 
-  async findById(id: bigint): Promise<User | null> {
+  async findById(id: number): Promise<User | null> {
     return this.prisma.user.findUnique({
       where: { id },
     });
   }
 
-  async verifyEmail(userId: bigint): Promise<void> {
+  async validatePassword(user: User, password: string): Promise<boolean> {
+    return bcrypt.compare(password, user.password);
+  }
+
+  async saveActiveToken(userId: number, token: string): Promise<void> {
     await this.prisma.user.update({
       where: { id: userId },
-      data: { email_verified: true },
+      data: {
+        metaData: {
+          token,
+          last_activity: Date.now(),
+        },
+      },
     });
   }
 
-  async validatePassword(user: User, password: string): Promise<boolean> {
-    return bcrypt.compare(password, user.password);
+  async sendVerificationEmail(user: User): Promise<void> {
+    // Генерируем токен для подтверждения email
+    const verificationToken = this.generateEmailVerificationToken();
+    const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 часа
+
+    // Сохраняем токен в metaData
+    const currentMetaData = (user.metaData as any) || {};
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        metaData: {
+          ...currentMetaData,
+          emailVerificationToken: verificationToken,
+          emailVerificationExpires: expiresAt,
+        },
+      },
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const verificationLink = `${frontendUrl}/verify-email.html?token=${verificationToken}`;
+    console.log(`📧 Email verification link for ${user.email}:`);
+    console.log(`🔗 ${verificationLink}`);
+
+    // TODO: Когда будет готов email сервис
+  }
+
+  async verifyEmailToken(token: string): Promise<boolean> {
+    const users = await this.prisma.user.findMany({
+      where: {
+        metaData: {
+          path: ['emailVerificationToken'],
+          equals: token,
+        },
+      },
+    });
+
+    const user = users[0];
+    if (!user) {
+      throw new BadRequestException('Invalid verification token');
+    }
+
+    const metaData = user.metaData as any;
+    if (
+      !metaData?.emailVerificationExpires ||
+      Date.now() > metaData.emailVerificationExpires
+    ) {
+      throw new BadRequestException('Verification token expired');
+    }
+
+    // Подтверждаем email и очищаем токен
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        email_verified: true,
+        metaData: {
+          ...metaData,
+          emailVerificationToken: null,
+          emailVerificationExpires: null,
+        },
+      },
+    });
+
+    return true;
+  }
+
+  private generateEmailVerificationToken(): string {
+    return require('crypto').randomBytes(32).toString('hex');
   }
 }
