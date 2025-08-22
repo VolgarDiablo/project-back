@@ -109,11 +109,20 @@ export class AuthService {
 
   private generateTokenActive(payload: { id: number }): string {
     const secret = this.configService.get<string>('JWT_SECRET');
+    const expiresIn = this.configService.get<string>('JWT_EXPIRES_IN');
 
     if (!secret) {
       throw new Error('JWT_SECRET is required');
     }
 
-    return jwt.sign(payload, secret, { expiresIn: '30d' });
+    if (!expiresIn) {
+      throw new Error('JWT_EXPIRES_IN is required');
+    }
+
+    return jwt.sign(
+      payload,
+      secret as jwt.Secret,
+      { expiresIn } as jwt.SignOptions,
+    );
   }
 }
