@@ -11,7 +11,7 @@ datasource db {
 }
 
 model User {
-  id               BigInt  @id @default(autoincrement())
+  id               Int     @id @default(autoincrement())
   name             String
   email            String  @unique
   phone            String?
@@ -19,6 +19,7 @@ model User {
   affiliate_id     String  @unique @default(cuid()) // реферальный код пользователя
   referred_by      String? // кто привел пользователя
   email_verified   Boolean @default(false)
+  metaData         Json?
   balance          Float   @default(0) @db.DoublePrecision
   profit_balance   Float   @default(0) @db.DoublePrecision
   invest_balance   Float   @default(0) @db.DoublePrecision
@@ -46,10 +47,10 @@ model User {
 }
 
 model UserReferral {
-  id        BigInt  @id @default(autoincrement())
-  user_id   BigInt  @unique
-  level1_id BigInt?
-  level2_id BigInt?
+  id        Int  @id @default(autoincrement())
+  user_id   Int  @unique
+  level1_id Int?
+  level2_id Int?
 
   // Связи
   user   User  @relation("UserReferralUser", fields: [user_id], references: [id], onDelete: Cascade)
@@ -60,8 +61,8 @@ model UserReferral {
 }
 
 model Withdraw {
-  id             BigInt   @id @default(autoincrement())
-  user_id        BigInt
+  id             Int      @id @default(autoincrement())
+  user_id        Int
   invoice_id     String?
   type           String
   amount_percent Float    @db.DoublePrecision
@@ -79,8 +80,8 @@ model Withdraw {
 }
 
 model Order {
-  id             BigInt  @id @default(autoincrement())
-  user_id        BigInt
+  id             Int     @id @default(autoincrement())
+  user_id        Int
   invoice_id     String?
   status         String
   payment_method String
@@ -98,7 +99,7 @@ model Order {
 }
 
 model Plan {
-  id            BigInt @id @default(autoincrement())
+  id            Int    @id @default(autoincrement())
   title         String
   description   String
   percent_daily Float  @db.DoublePrecision
@@ -115,9 +116,9 @@ model Plan {
 }
 
 model OrderPlan {
-  id       BigInt @id @default(autoincrement())
-  order_id BigInt @unique
-  plan_id  BigInt
+  id       Int @id @default(autoincrement())
+  order_id Int @unique
+  plan_id  Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -129,9 +130,9 @@ model OrderPlan {
 }
 
 model Earn {
-  id       BigInt @id @default(autoincrement())
-  user_id  BigInt
-  order_id BigInt
+  id       Int   @id @default(autoincrement())
+  user_id  Int
+  order_id Int
   amount   Float
 
   createdAt DateTime @default(now())
