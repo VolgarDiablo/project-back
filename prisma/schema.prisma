@@ -11,23 +11,23 @@ datasource db {
 }
 
 model User {
-  id               Int     @id @default(autoincrement())
-  name             String
-  email            String  @unique
-  phone            String?
-  password         String
-  affiliate_id     String  @unique @default(cuid()) // реферальный код пользователя
-  referred_by      String? // кто привел пользователя
-  email_verified   Boolean @default(false)
-  metaData         Json?
-  balance          Float   @default(0) @db.DoublePrecision
-  profit_balance   Float   @default(0) @db.DoublePrecision
-  invest_balance   Float   @default(0) @db.DoublePrecision
-  country_code     String?
-  level1_per       Int     @default(5) // процент с первого уровня
-  level2_per       Int     @default(2) // процент со второго уровня
-  u_level1_balance Float   @default(0) @db.DoublePrecision // заработок с 1 уровня
-  u_level2_balance Float   @default(0) @db.DoublePrecision // заработок со 2 уровня
+  id             Int     @id @default(autoincrement())
+  name           String
+  email          String  @unique
+  phone          String?
+  password       String
+  affiliateId    String  @unique @default(cuid()) // реферальный код пользователя
+  referredBy     String? // кто привел пользователя
+  emailVerified  Boolean @default(false)
+  metaData       Json?
+  balance        Float   @default(0) @db.DoublePrecision
+  profitBalance  Float   @default(0) @db.DoublePrecision
+  investBalance  Float   @default(0) @db.DoublePrecision
+  countryCode    String?
+  level1Per      Int     @default(5) // процент с первого уровня
+  level2Per      Int     @default(2) // процент со второго уровня
+  uLevel1Balance Float   @default(0) @db.DoublePrecision // заработок с 1 уровня
+  uLevel2Balance Float   @default(0) @db.DoublePrecision // заработок со 2 уровня
 
   role Role @default(USER)
 
@@ -47,52 +47,68 @@ model User {
 }
 
 model UserReferral {
-  id        Int  @id @default(autoincrement())
-  user_id   Int  @unique
-  level1_id Int?
-  level2_id Int?
+  id       Int  @id @default(autoincrement())
+  userId   Int  @unique
+  level1Id Int?
+  level2Id Int?
 
   // Связи
-  user   User  @relation("UserReferralUser", fields: [user_id], references: [id], onDelete: Cascade)
-  level1 User? @relation("Level1Referral", fields: [level1_id], references: [id])
-  level2 User? @relation("Level2Referral", fields: [level2_id], references: [id])
+  user   User  @relation("UserReferralUser", fields: [userId], references: [id], onDelete: Cascade)
+  level1 User? @relation("Level1Referral", fields: [level1Id], references: [id])
+  level2 User? @relation("Level2Referral", fields: [level2Id], references: [id])
 
   @@map("user_referral")
 }
 
-model Withdraw {
-  id             Int      @id @default(autoincrement())
-  user_id        Int
-  invoice_id     String?
-  type           String
-  amount_percent Float    @db.DoublePrecision
-  amount         Float    @db.DoublePrecision
-  status         String
-  details_first  String
-  details_second String
-  details_third  String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+enum PaymentMethod {
+  CRYPTO
+  BANK_TRANSFER
+  PAYPAL
+}
 
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+enum OrderType {
+  PLAN
+  DEPOSIT
+}
+
+enum OrderStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model Withdraw {
+  id             Int           @id @default(autoincrement())
+  userId         Int
+  invoiceId      String?
+  type           PaymentMethod @default(CRYPTO)
+  amountPercent  Float         @db.DoublePrecision
+  amount         Float         @db.DoublePrecision
+  status         String
+  paymentDetails Json
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("withdraws")
 }
 
 model Order {
-  id               Int       @id @default(autoincrement())
-  user_id          Int
-  invoice_id       String?
-  status           String
-  payment_method   String
-  type             String
-  amount           Float     @db.DoublePrecision
-  active_plan_data DateTime?
+  id             Int           @id @default(autoincrement())
+  userId         Int
+  invoiceId      String?
+  status         OrderStatus   @default(PENDING)
+  paymentMethod  PaymentMethod
+  type           OrderType
+  amount         Float         @db.DoublePrecision
+  activePlanData DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  User       User       @relation(fields: [user_id], references: [id])
+  User       User       @relation(fields: [userId], references: [id])
   OrderPlans OrderPlan?
   Earns      Earn[]
 
@@ -100,13 +116,13 @@ model Order {
 }
 
 model Plan {
-  id            Int    @id @default(autoincrement())
-  title         String
-  description   String
-  percent_daily Float  @db.DoublePrecision
-  term_days     Int
-  min_deposit   Int
-  roi           Float  @db.DoublePrecision
+  id           Int    @id @default(autoincrement())
+  title        String
+  description  String
+  percentDaily Float  @db.DoublePrecision
+  termDays     Int
+  minDeposit   Int
+  roi          Float  @db.DoublePrecision
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -117,31 +133,34 @@ model Plan {
 }
 
 model OrderPlan {
-  id       Int @id @default(autoincrement())
-  order_id Int @unique
-  plan_id  Int
+  id      Int @id @default(autoincrement())
+  orderId Int @unique
+  planId  Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  Order Order @relation(fields: [order_id], references: [id])
-  Plan  Plan  @relation(fields: [plan_id], references: [id])
+  Order Order  @relation(fields: [orderId], references: [id])
+  Plan  Plan   @relation(fields: [planId], references: [id])
+  earns Earn[]
 
-  @@map("order_plans")
+  @@map("orderPlans")
 }
 
 model Earn {
-  id       Int   @id @default(autoincrement())
-  user_id  Int
-  order_id Int
-  amount   Float
+  id          Int   @id @default(autoincrement())
+  userId      Int
+  orderPlanId Int
+  amount      Float
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Связи
-  user   User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  Orders Order @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderPlan OrderPlan @relation(fields: [orderPlanId], references: [id], onDelete: Cascade)
+  Order     Order?    @relation(fields: [orderId], references: [id])
+  orderId   Int?
 
   @@map("earns")
 }
